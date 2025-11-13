@@ -29,7 +29,7 @@ fi
 echo "📦 Installing Python dependencies..."
 source venv/bin/activate
 pip install -q --upgrade pip
-pip install -q -r requirements.txt
+pip install -q -r metrics-service/requirements.txt
 if [ $? -ne 0 ]; then
     echo "❌ Failed to install Python dependencies"
     exit 1

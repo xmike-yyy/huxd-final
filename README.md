@@ -11,81 +11,81 @@ A frame-sensitive conversational system for mental wellness, powered by three sp
 
 ### Installation & Setup
 
-**1. Clone or navigate to the project:**
+**Step 1: Clone the repository**
 ```bash
+git clone <your-repo-url>
 cd huxd_final
 ```
 
-**2. Set up the Frontend (SvelteKit):**
+**Step 2: Create environment file**
 ```bash
-# Install Node dependencies
-npm install
-
 # Create .env file with your Gemini API key
 echo "GEMINI_API_KEY=your_gemini_api_key_here" > .env
 ```
 
-**3. Set up the Python Metrics Service:**
-```bash
-# Navigate to metrics service
-cd metrics-service
+**Step 3: Run the startup script (RECOMMENDED)**
 
-# Create Python virtual environment
+The startup script handles everything automatically:
+```bash
+bash start.sh
+```
+
+This will:
+- ✅ Create and activate Python virtual environment
+- ✅ Install Python dependencies from `metrics-service/requirements.txt`
+- ✅ Install Node.js dependencies
+- ✅ Start the Python Metrics Service on port 8000
+- ✅ Start the SvelteKit Frontend on port 5173
+
+**Step 4: Open the app**
+```
+http://localhost:5173
+```
+
+---
+
+### Manual Setup (Alternative)
+
+If you prefer to run services separately:
+
+**Terminal 1 - Python Metrics Service:**
+```bash
+# Create virtual environment (first time only)
 python3 -m venv venv
 
 # Activate virtual environment
-# On Mac/Linux:
-source venv/bin/activate
-# On Windows:
-# venv\Scripts\activate
+source venv/bin/activate  # Mac/Linux
+# venv\Scripts\activate   # Windows
 
-# Install Python dependencies
-pip install -r requirements.txt
+# Install dependencies
+pip install -r metrics-service/requirements.txt
 
-# Return to project root
-cd ..
-```
-
-### Running the Application
-
-**Option 1: Easy Start (Recommended)**
-
-Use the provided startup script:
-```bash
-./start.sh
-```
-
-This will start both services automatically!
-
-**Option 2: Manual Start**
-
-You need to run **TWO services** simultaneously:
-
-**Terminal 1 - Python Metrics Service (Port 8000):**
-```bash
+# Start the metrics service
 cd metrics-service
-source venv/bin/activate  # Activate venv if not already active
 python main.py
 ```
 
-You should see:
+Expected output:
 ```
 INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
 
-**Terminal 2 - SvelteKit Frontend (Port 5173):**
+**Terminal 2 - SvelteKit Frontend:**
 ```bash
-# From project root
+# Install Node dependencies (first time only)
+npm install
+
+# Start the dev server
 npm run dev
 ```
 
-You should see:
+Expected output:
 ```
 VITE v5.4.21  ready in 961 ms
 ➜  Local:   http://localhost:5173/
 ```
 
-**3. Open the app:**
+**Open the app:**
 ```
 http://localhost:5173
 ```
@@ -147,7 +147,7 @@ User Input → Input Analyzer → Orchestrator → [Selected Frame] → Response
 ## Project Structure
 
 ```
-b-me-wellness/
+huxd_final/
 ├── src/
 │   ├── lib/
 │   │   ├── agents/
@@ -168,12 +168,13 @@ b-me-wellness/
 │       └── +page.svelte                  # Chat UI
 ├── metrics-service/                      # Python FastAPI service
 │   ├── main.py                           # Metrics calculation endpoints
-│   ├── requirements.txt                  # Python dependencies
-│   └── venv/                             # Python virtual environment
+│   └── requirements.txt                  # Python dependencies
 ├── docs/
 │   ├── ARCHITECTURE.md                   # Detailed architecture
 │   └── NEXT_STEPS.md                     # Future improvements
-├── .env                                  # Environment variables
+├── venv/                                 # Python virtual environment (created by start.sh)
+├── .env                                  # Environment variables (you create this)
+├── start.sh                              # Automated startup script
 ├── package.json                          # Node dependencies
 └── README.md                             # This file
 ```
@@ -197,8 +198,9 @@ GEMINI_API_KEY=your_gemini_api_key_here
 
 **Backend (Python):**
 - Edit `metrics-service/main.py`
-- Restart the Python service (Ctrl+C, then `python main.py`)
+- Restart the Python service (Ctrl+C, then `cd metrics-service && python main.py`)
 - Check terminal for errors
+- Remember to activate venv first: `source venv/bin/activate`
 
 ### Debugging
 
