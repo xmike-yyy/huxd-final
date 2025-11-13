@@ -13,7 +13,7 @@ A frame-sensitive conversational system for mental wellness, powered by three sp
 
 **1. Clone or navigate to the project:**
 ```bash
-cd b-me-wellness
+cd huxd_final
 ```
 
 **2. Set up the Frontend (SvelteKit):**
