@@ -12,8 +12,9 @@ Roadmap for improving the current implementation to a production-ready mental we
 - Three conversational frames (Reflective Listener, Clarity Coach, Momentum Partner)
 - Dynamic frame routing based on emotional state
 - Gemini API integration for LLM responses
-- Basic chat UI with color-coded frames
-- Real-time metrics display
+- Three-column UI (Sidebar | Chat | Reflection Log)
+- Frame-colored messages with timestamps
+- Real-time timestamp updates ("Just now", "5m ago", etc.)
 
 ✅ **Advanced Metrics (Python Service):**
 - **Sentiment authenticity scoring** using VADER + TextBlob
@@ -34,27 +35,48 @@ Roadmap for improving the current implementation to a production-ready mental we
   - Monitors self-generated insights
   - Location: `metrics-service/main.py` (lines 370-405)
 
+✅ **Response Evaluator:**
+- Rejection/retry logic for low-quality responses (max 3 attempts)
+- Behavioral modulations based on evaluation issues
+- Fallback to Reflective Listener if all retries fail
+- Location: `src/lib/evaluator/ResponseEvaluator.js`
+
+✅ **Reflection Log:**
+- Manual reflection entry via modal
+- Delete reflections
+- Timestamps with relative display
+- localStorage persistence
+- Location: `src/lib/stores/reflections.js`
+
+✅ **Persistence:**
+- localStorage for conversation history
+- Multi-session management (unlimited sessions)
+- Session create, read, update, delete operations
+- Auto-generated session titles
+- Rename sessions with confirmation
+- Delete sessions with confirmation
+- Export conversations (JSON and Markdown)
+- Session recovery on page reload
+- Location: `src/lib/stores/conversations.js`
+
 ### What's Still Needed:
 
-❌ **Response Evaluator:**
-- No rejection/retry logic for low-quality responses
-- Agents don't modulate behavior based on metrics
-- File needed: `src/lib/evaluator/ResponseEvaluator.js`
-
-❌ **Reflection Log:**
-- No insights extraction from conversations
-- No manual reflection entry
-- No conversation summary generation
-
-❌ **Persistence:**
-- No localStorage for conversation history
-- No session recovery
-- Can't export conversations
-
 ❌ **Production Features:**
-- No error handling/monitoring
+- No error handling/monitoring (Sentry)
 - No rate limiting
-- No multi-user support
+- No multi-user support (authentication)
+- No cloud database (Supabase)
+
+❌ **Advanced Analytics & Insights (Phase 5):**
+- No automated insights extraction from conversations (LLM-powered)
+- No conversation summary generation
+- No mood tracking over time
+- No progress visualization
+
+❌ **UX Improvements:**
+- No voice input/output
+- No conversation search
+- No dark mode
 
 ---
 
@@ -69,24 +91,34 @@ b-me-wellness/
 ├── src/
 │   ├── lib/
 │   │   ├── agents/               ← Three conversational frames
+│   │   │   ├── BaseAgent.js      ← Enhanced with modulations
+│   │   │   ├── ReflectiveListener.js
+│   │   │   ├── ClarityCoach.js
+│   │   │   └── MomentumPartner.js
 │   │   ├── orchestrator/         ← Frame routing logic
+│   │   │   └── Orchestrator.js   ← Enhanced with retry loop
+│   │   ├── evaluator/            ← NEW
+│   │   │   └── ResponseEvaluator.js  ← Quality checks & retry logic
+│   │   ├── stores/               ← NEW
+│   │   │   ├── conversations.js  ← Multi-session management
+│   │   │   └── reflections.js    ← Reflection log storage
 │   │   ├── metrics/              ← Metrics client (calls Python service)
 │   │   └── services/
 │   └── routes/
-│       ├── +page.svelte          ← Chat UI
-│       └── api/chat/+server.js   ← Main chat endpoint
+│       ├── +page.svelte          ← Three-column UI (Sidebar | Chat | Reflection)
+│       └── api/chat/+server.js   ← Enhanced with evaluation results
 └── docs/
-    ├── ARCHITECTURE.md
-    └── NEXT_STEPS.md             ← This file
+    ├── ARCHITECTURE.md            ← Updated with UI architecture
+    └── NEXT_STEPS.md              ← This file
 ```
 
 ---
 
-## Phase 1: Response Evaluator & Behavioral Modulation
+## Phase 1: Response Evaluator & Behavioral Modulation ✅ COMPLETED
 
-Add feedback loop to reject poor responses and adjust agent behavior.
+~~Add feedback loop to reject poor responses and adjust agent behavior.~~
 
-### Tasks:
+### Tasks (All Completed):
 
 **1. Create ResponseEvaluator Class**
 
@@ -197,9 +229,16 @@ getModulatedSystemPrompt(metrics, modulations) {
 
 ---
 
-## Phase 2: Reflection Log & Insights
+## Phase 2: Reflection Log & Manual Entry ✅ COMPLETED
 
-Add conversation insights and manual reflection entry.
+~~Add conversation insights and manual reflection entry.~~
+
+**Completed:**
+- ✅ Manual reflection entry via modal
+- ✅ Reflection storage with timestamps
+- ✅ Delete reflections
+- ✅ localStorage persistence
+- ✅ Three-column UI with dedicated Reflection Log panel
 
 ### Tasks:
 
@@ -278,11 +317,23 @@ File: `src/routes/+page.svelte` (add panel)
 
 ---
 
-## Phase 3: Persistence & Export
+## Phase 3: Persistence & Export ✅ COMPLETED
 
-Add localStorage and export functionality.
+~~Add localStorage and export functionality.~~
 
-### Tasks:
+**Completed:**
+- ✅ localStorage persistence for conversations
+- ✅ localStorage persistence for reflections
+- ✅ Multi-session management (unlimited sessions)
+- ✅ Session CRUD operations
+- ✅ Auto-generated session titles
+- ✅ Rename sessions with confirmation
+- ✅ Delete sessions with confirmation
+- ✅ Export to JSON format
+- ✅ Export to Markdown format
+- ✅ Real-time timestamps with auto-updates
+
+### Tasks (All Completed):
 
 **1. Add localStorage Persistence**
 
@@ -465,24 +516,33 @@ Consider adding after core functionality is solid:
 
 ## Recommended Priority
 
-### This Week:
-1. ✅ Sentiment authenticity - DONE
-2. ✅ Validation compliance - DONE
-3. ✅ Python metrics service - DONE
-4. ⏳ Response evaluator - IN PROGRESS
-5. ⏳ Behavioral modulations - NEXT
+### Completed (Phases 1-3):
+1. ✅ Sentiment authenticity
+2. ✅ Validation compliance
+3. ✅ Python metrics service
+4. ✅ Response evaluator with retry loop
+5. ✅ Behavioral modulations
+6. ✅ Reflection log UI
+7. ✅ localStorage persistence for conversations & reflections
+8. ✅ Multi-session management
+9. ✅ Export functionality (JSON & Markdown)
+10. ✅ Real-time timestamps
 
-### Next Week:
-6. Reflection log UI
-7. Conversation insights generation
-8. localStorage persistence
-9. Export functionality
+### Next Priorities (Phase 4):
+1. ⏳ Error handling & monitoring (Sentry)
+2. ⏳ Rate limiting
+3. ⏳ Better error messages to users
+4. ⏳ Production deployment (Vercel + Python service)
+5. ⏳ User testing & feedback
 
-### Following Week:
-10. Error handling
-11. Rate limiting
-12. Production deployment
-13. User testing
+### Future Enhancements (Phase 5):
+6. ⏳ Automated conversation insights extraction
+7. ⏳ Conversation summary generation
+8. ⏳ Mood tracking over time
+9. ⏳ Voice input/output
+10. ⏳ Conversation search
+11. ⏳ Dark mode
+12. ⏳ Multi-user support (authentication + cloud sync)
 
 ---
 
@@ -532,36 +592,49 @@ Consider adding after core functionality is solid:
 
 ```
 b-me-wellness/
-├── metrics-service/              # Python FastAPI service
-│   ├── main.py                   # All metrics calculations
+├── metrics-service/              # Python FastAPI service (Port 8000)
+│   ├── main.py                   # All 5 metrics calculations
 │   ├── requirements.txt
 │   ├── README.md
 │   └── venv/
 ├── src/
 │   ├── lib/
-│   │   ├── agents/
-│   │   │   ├── BaseAgent.js
+│   │   ├── agents/               # Three conversational frames
+│   │   │   ├── BaseAgent.js      # ✅ Enhanced with modulations
 │   │   │   ├── ReflectiveListener.js
 │   │   │   ├── ClarityCoach.js
 │   │   │   └── MomentumPartner.js
-│   │   ├── orchestrator/
-│   │   │   └── Orchestrator.js
-│   │   ├── metrics/
+│   │   ├── orchestrator/         # Frame routing logic
+│   │   │   └── Orchestrator.js   # ✅ Enhanced with retry loop
+│   │   ├── evaluator/            # ✅ NEW - Response quality checks
+│   │   │   └── ResponseEvaluator.js
+│   │   ├── stores/               # ✅ NEW - State management
+│   │   │   ├── conversations.js  # ✅ Multi-session management
+│   │   │   └── reflections.js    # ✅ Reflection log storage
+│   │   ├── metrics/              # Metrics client
 │   │   │   ├── MetricsTracker.js
 │   │   │   └── metricsService.js
 │   │   └── services/
 │   │       ├── gemini.js
 │   │       └── inputAnalyzer.js
 │   └── routes/
-│       ├── +page.svelte
-│       └── api/chat/+server.js
+│       ├── +page.svelte          # ✅ Three-column UI
+│       └── api/chat/+server.js   # ✅ Enhanced with evaluation
 ├── docs/
-│   ├── ARCHITECTURE.md
-│   └── NEXT_STEPS.md
+│   ├── ARCHITECTURE.md            # ✅ Updated
+│   └── NEXT_STEPS.md              # ✅ Updated (this file)
 ├── package.json
 ├── README.md
-└── start.sh                      # Easy startup script
+└── start.sh                       # Easy startup script
 ```
+
+**Key Files:**
+- `src/lib/evaluator/ResponseEvaluator.js`: Quality checks, retry logic, modulations
+- `src/lib/stores/conversations.js`: Multi-session management with localStorage
+- `src/lib/stores/reflections.js`: Reflection log with localStorage
+- `src/routes/+page.svelte`: Three-column UI (Sidebar | Chat | Reflection Log)
+- `src/lib/orchestrator/Orchestrator.js`: Enhanced with evaluation loop
+- `src/lib/agents/BaseAgent.js`: Enhanced with behavioral modulations
 
 ---
 

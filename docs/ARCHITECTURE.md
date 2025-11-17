@@ -425,17 +425,43 @@ function detectUserSolution(userMessage) {
 
 ### State Management
 
-**Conversation Store** (Svelte writable):
+**Conversation Store** (Svelte writable + localStorage):
 ```javascript
 {
-  messages: [
-    { role: "user", content: "...", timestamp: ... },
-    { role: "assistant", content: "...", frame: "reflective-listener", timestamp: ... }
-  ],
-  currentFrame: "reflective-listener",
-  sessionStart: timestamp
+  sessions: {
+    "session_123": {
+      id: "session_123",
+      title: "Feeling overwhelmed with work",
+      messages: [
+        {
+          role: "user",
+          content: "...",
+          timestamp: "2025-11-16T20:30:00Z"
+        },
+        {
+          role: "assistant",
+          content: "...",
+          frame: "reflective-listener",
+          timestamp: "2025-11-16T20:30:05Z"
+        }
+      ],
+      createdAt: "2025-11-16T20:30:00Z",
+      updatedAt: "2025-11-16T20:35:00Z"
+    }
+  },
+  currentSessionId: "session_123"
 }
 ```
+
+**Features:**
+- Multi-session management (unlimited sessions)
+- Auto-save to localStorage on every change
+- Session CRUD operations (create, read, update, delete)
+- Auto-generated titles from first user message
+- Rename functionality with confirmation
+- Delete confirmation dialogs
+- Export to JSON/Markdown
+- Real-time timestamps with relative display ("Just now", "5m ago")
 
 **Metrics Store** (Svelte writable):
 ```javascript
@@ -454,14 +480,21 @@ function detectUserSolution(userMessage) {
 {
   reflections: [
     {
-      date: "2025-11-13",
-      insight: "Noticed I'm more stressed on Mondays",
+      id: "reflection_abc123",
+      content: "Noticed I'm more stressed on Mondays",
       mood: "frustrated",
-      generatedBy: "user-conversation"
+      createdAt: "2025-11-16T20:30:00Z"
     }
   ]
 }
 ```
+
+**Features:**
+- Manual reflection entry via modal
+- Auto-save to localStorage
+- Delete reflections with hover action
+- Real-time timestamp updates ("Just now", "5m ago")
+- Chronological ordering (newest first)
 
 ---
 
@@ -517,6 +550,45 @@ function detectUserSolution(userMessage) {
 - Environment variable management
 - Zero configuration deployment
 - No server maintenance
+
+---
+
+## UI Architecture
+
+### Three-Column Layout
+
+```
+┌──────────────┬─────────────────────────┬────────────────┐
+│   Sidebar    │      Chat Section       │  Reflection    │
+│   (280px)    │      (flexible)         │  Log (350px)   │
+├──────────────┼─────────────────────────┼────────────────┤
+│              │                         │                │
+│ B-Me         │  ✳ B-Me                 │ Reflection Log │
+│              │                         │                │
+│ + New Chat   │  [Chat Container]       │ [Reflections]  │
+│              │  - User messages        │ - Timestamps   │
+│ Sessions:    │  - Assistant messages   │ - Content      │
+│ • Session 1  │  - Frame colors         │ - Delete btns  │
+│ • Session 2  │  - Timestamps           │                │
+│ • Session 3  │                         │                │
+│              │  [Input Box]            │ 🖊 Start       │
+│              │  Type your thought...   │   writing...   │
+│              │  [Send]                 │                │
+└──────────────┴─────────────────────────┴────────────────┘
+```
+
+**Features:**
+- **Sidebar**: Session management with create, switch, rename, delete
+- **Chat**: Conversation display with frame-colored messages and timestamps
+- **Reflection Log**: Manual reflection entry and display
+- **Responsive**: Stacks vertically on mobile (< 1024px)
+- **Modals**: Confirmation dialogs for delete, rename input, reflection entry
+
+**Color Coding:**
+- Reflective Listener: `#E8F0FF` (light blue)
+- Clarity Coach: `#FFF4E6` (light orange)
+- Momentum Partner: `#FFE8EC` (light pink)
+- User messages: `#E8F0FF` (light blue)
 
 ---
 
