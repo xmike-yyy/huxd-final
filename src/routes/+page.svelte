@@ -138,6 +138,19 @@
     }
   }
 
+  function getFrameName(frame) {
+    switch (frame) {
+      case 'reflective-listener':
+        return 'Reflective Listener';
+      case 'clarity-coach':
+        return 'Clarity Coach';
+      case 'momentum-partner':
+        return 'Momentum Partner';
+      default:
+        return 'B-Me';
+    }
+  }
+
   function formatDate(isoString) {
     const date = new Date(isoString);
     const currentTime = new Date(now); // Use the reactive `now` variable
@@ -334,12 +347,33 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   }
 
-  .message {
+  .message-wrapper {
+    display: flex;
+    flex-direction: column;
     max-width: 75%;
+    animation: fadeIn 0.2s ease-in;
+  }
+
+  .message-wrapper.user {
+    align-self: flex-end;
+  }
+
+  .message-wrapper.assistant {
+    align-self: flex-start;
+  }
+
+  .frame-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+    padding-left: 0.5rem;
+  }
+
+  .message {
     padding: 1rem 1.25rem;
     border-radius: 12px;
     line-height: 1.6;
-    animation: fadeIn 0.2s ease-in;
   }
 
   @keyframes fadeIn {
@@ -354,14 +388,12 @@
   }
 
   .message.user {
-    align-self: flex-end;
     background: #e8f0ff;
     border: 1px solid #c7d2fe;
     color: #1e293b;
   }
 
   .message.assistant {
-    align-self: flex-start;
     border: 1px solid #e5e7eb;
     color: #1e293b;
   }
@@ -757,25 +789,32 @@
       {/if}
 
       {#each messages as message}
-        <div
-          class="message {message.role}"
-          style={message.role === 'assistant' && message.frame
-            ? `background: ${getFrameColor(message.frame)}`
-            : ''}
-        >
-          <div class="message-content">{message.content}</div>
-          {#if message.timestamp}
-            <div class="message-timestamp">{formatDate(message.timestamp)}</div>
+        <div class="message-wrapper {message.role}">
+          {#if message.role === 'assistant' && message.frame}
+            <div class="frame-label">{getFrameName(message.frame)}</div>
           {/if}
+          <div
+            class="message {message.role}"
+            style={message.role === 'assistant' && message.frame
+              ? `background: ${getFrameColor(message.frame)}`
+              : ''}
+          >
+            <div class="message-content">{message.content}</div>
+            {#if message.timestamp}
+              <div class="message-timestamp">{formatDate(message.timestamp)}</div>
+            {/if}
+          </div>
         </div>
       {/each}
 
       {#if isLoading}
-        <div class="message assistant">
-          <div class="typing">
-            <span class="dot"></span>
-            <span class="dot"></span>
-            <span class="dot"></span>
+        <div class="message-wrapper assistant">
+          <div class="message assistant">
+            <div class="typing">
+              <span class="dot"></span>
+              <span class="dot"></span>
+              <span class="dot"></span>
+            </div>
           </div>
         </div>
       {/if}
