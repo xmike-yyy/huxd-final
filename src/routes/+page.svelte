@@ -315,6 +315,8 @@
     flex-direction: column;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     padding: 2rem;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .header {
