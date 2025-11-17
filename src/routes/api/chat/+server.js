@@ -30,9 +30,12 @@ export async function POST({ request }) {
       }
     }
 
-    // Orchestrate response
+    // Get current metrics for orchestrator
+    const currentMetrics = metricsTracker.toJSON();
+
+    // Orchestrate response with current metrics
     const orchestrator = new Orchestrator();
-    const result = await orchestrator.orchestrate(contents);
+    const result = await orchestrator.orchestrate(contents, currentMetrics);
 
     // Check validation compliance for the NEW exchange
     const lastUserMessage = contents.filter((c) => c.role === 'user').pop();
@@ -50,7 +53,8 @@ export async function POST({ request }) {
       frame: result.frame,
       reason: result.reason,
       metrics: metrics,
-      inputAnalysis: result.inputAnalysis
+      inputAnalysis: result.inputAnalysis,
+      evaluation: result.evaluation // Include evaluation results
     });
   } catch (err) {
     console.error('Chat API error:', err);
