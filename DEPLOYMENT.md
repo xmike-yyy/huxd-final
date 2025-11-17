@@ -6,12 +6,13 @@ This guide will walk you through deploying the B-Me wellness chatbot to producti
 
 - GitHub account
 - Vercel account (free tier works)
-- Render/Railway account for Python service (or alternative)
 - Google Gemini API key (get one at https://aistudio.google.com/app/apikey)
+
+**Note:** As of the latest version, all metrics are calculated in JavaScript. No Python service needed!
 
 ---
 
-## Part 1: Deploy Frontend to Vercel
+## Deploy to Vercel (Complete Guide)
 
 ### Step 1: Push to GitHub
 
@@ -19,18 +20,17 @@ This guide will walk you through deploying the B-Me wellness chatbot to producti
 # Make sure you're on main branch
 git checkout main
 
-# Push to GitHub (create repo first if needed)
-git remote add origin https://github.com/YOUR_USERNAME/b-me-wellness.git
-git push -u origin main
+# Push to GitHub
+git push origin main
 ```
 
 ### Step 2: Deploy to Vercel
 
-1. Go to https://vercel.com and sign in
+1. Go to https://vercel.com and sign in with GitHub
 2. Click "Add New..." → "Project"
 3. Import your GitHub repository
 4. Configure the project:
-   - **Framework Preset**: SvelteKit
+   - **Framework Preset**: SvelteKit (auto-detected)
    - **Root Directory**: `./` (keep default)
    - **Build Command**: `npm run build` (auto-detected)
    - **Output Directory**: `.svelte-kit` (auto-detected)
@@ -42,175 +42,47 @@ git push -u origin main
 
 6. Click "Deploy"
 
-Your frontend will be live at: `https://your-project.vercel.app`
+**That's it!** Your app will be live at: `https://your-project.vercel.app`
 
 ---
 
-## Part 2: Deploy Python Metrics Service
-
-### Option A: Deploy to Render (Recommended - Free Tier)
-
-1. Go to https://render.com and sign in
-
-2. Click "New" → "Web Service"
-
-3. Connect your GitHub repo
-
-4. Configure:
-   - **Name**: `bme-metrics-service`
-   - **Region**: Choose closest to you
-   - **Branch**: `main`
-   - **Root Directory**: `metrics-service`
-   - **Runtime**: `Python 3`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-   - **Instance Type**: `Free`
-
-5. Click "Create Web Service"
-
-6. Once deployed, copy the service URL (e.g., `https://bme-metrics-service.onrender.com`)
-
-### Option B: Deploy to Railway
-
-1. Go to https://railway.app and sign in
-
-2. Click "New Project" → "Deploy from GitHub repo"
-
-3. Select your repository
-
-4. Configure:
-   - **Root Directory**: `metrics-service`
-   - Railway will auto-detect Python and FastAPI
-
-5. Once deployed, copy the service URL
-
-### Option C: Deploy to Fly.io
-
-```bash
-# Install flyctl
-brew install flyctl
-
-# Login
-flyctl auth login
-
-# Navigate to metrics service
-cd metrics-service
-
-# Initialize fly app
-flyctl launch
-# Answer prompts:
-# - App name: bme-metrics-service
-# - Region: choose closest
-# - Postgres: No
-# - Redis: No
-
-# Deploy
-flyctl deploy
-```
-
----
-
-## Part 3: Connect Frontend to Python Service
-
-### Update Vercel Environment Variable
-
-1. Go to your Vercel project dashboard
-2. Navigate to "Settings" → "Environment Variables"
-3. Add new variable:
-   - **Name**: `METRICS_SERVICE_URL`
-   - **Value**: Your Python service URL (e.g., `https://bme-metrics-service.onrender.com`)
-4. Click "Save"
-5. Redeploy: Go to "Deployments" → Click "..." on latest deployment → "Redeploy"
-
----
-
-## Part 4: Update Code to Use Environment Variable
-
-The code should already handle this, but verify:
-
-```javascript
-// src/lib/services/metricsService.js
-const METRICS_SERVICE_URL =
-  process.env.METRICS_SERVICE_URL ||
-  'http://localhost:8000';
-```
 
 ---
 
 ## Testing Your Deployment
 
-### Test Frontend
+### Test Your App
 1. Visit your Vercel URL: `https://your-project.vercel.app`
-2. Send a test message
-3. Check browser console for errors
-
-### Test Python Service
-Visit: `https://your-metrics-service-url.com/docs`
-You should see the FastAPI interactive documentation.
-
-### Test Integration
-1. Open browser DevTools → Network tab
-2. Send a message in the chat
-3. Look for requests to `/api/chat`
-4. Check if metrics are being calculated (look at API response)
+2. Start a conversation - send a test message
+3. Check that:
+   - Messages send and receive properly
+   - Three-column layout displays correctly
+   - You can create new chat sessions
+   - Reflection log works
+4. Open browser DevTools → Console to check for errors
+5. Open Network tab → Send a message → Check `/api/chat` response includes metrics
 
 ---
 
 ## Troubleshooting
 
-### Frontend Issues
-
 **Problem**: "GEMINI_API_KEY not set"
-- Solution: Check Vercel environment variables, redeploy
+- **Solution**: Check Vercel environment variables, redeploy
 
 **Problem**: Blank page
-- Solution: Check Vercel deployment logs for build errors
+- **Solution**: Check Vercel deployment logs for build errors
 
 **Problem**: "Failed to send message"
-- Solution: Check browser console for specific error
+- **Solution**: Check browser console for specific error, verify API key is valid
 
-### Python Service Issues
+**Problem**: Metrics showing 0 or incorrect values
+- **Solution**: Metrics are calculated locally in JavaScript - check console for errors
 
-**Problem**: Service won't start
-- Solution: Check deployment logs, verify requirements.txt is correct
+**Problem**: Rate limit errors from Gemini
+- **Solution**: You're hitting Gemini's free tier limits (15 req/min). Wait or upgrade API plan
 
-**Problem**: 502 Bad Gateway
-- Solution: Check that the start command is correct:
-  ```
-  uvicorn main:app --host 0.0.0.0 --port $PORT
-  ```
-
-**Problem**: NLTK data not found
-- Solution: Add to requirements.txt:
-  ```
-  nltk==3.8.1
-  ```
-  And ensure `main.py` downloads NLTK data on startup:
-  ```python
-  import nltk
-  nltk.download('vader_lexicon', quiet=True)
-  nltk.download('punkt', quiet=True)
-  ```
-
-### Integration Issues
-
-**Problem**: Metrics not showing
-- Solution: Verify METRICS_SERVICE_URL is set correctly in Vercel
-
-**Problem**: CORS errors
-- Solution: Python service should have CORS enabled:
-  ```python
-  # In metrics-service/main.py
-  from fastapi.middleware.cors import CORSMiddleware
-
-  app.add_middleware(
-      CORSMiddleware,
-      allow_origins=["*"],  # In production, specify your Vercel domain
-      allow_credentials=True,
-      allow_methods=["*"],
-      allow_headers=["*"],
-  )
-  ```
+**Problem**: Build fails with "Module not found: sentiment"
+- **Solution**: Ensure `sentiment` package is in package.json and run `npm install`
 
 ---
 
@@ -220,34 +92,33 @@ You should see the FastAPI interactive documentation.
 - Go to your project → "Analytics" tab
 - See page views, response times, errors
 
-### Render Logs
-- Go to your service → "Logs" tab
-- Watch real-time logs
+### Vercel Logs
+- Go to "Deployments" → Click deployment → "Runtime Logs"
+- Watch real-time function execution
 
 ### Set Up Alerts (Optional)
 - Vercel: Settings → Notifications
-- Render: Dashboard → Notifications
+- Get alerts for deployment failures
 
 ---
 
 ## Cost Estimate
 
-### Free Tier Usage:
+### Free Tier (Perfect for personal use):
 - **Vercel**: Free for hobby projects
   - 100 GB bandwidth/month
   - Unlimited deployments
-- **Render**: Free tier
-  - 750 hours/month (always-on)
-  - Spins down after 15min inactivity
-  - Cold start ~30s
+  - Fast serverless functions
 - **Google Gemini**: Free tier
   - 15 requests/minute
   - 1500 requests/day
+  - Perfect for testing/personal use
 
 ### If You Outgrow Free Tier:
-- **Vercel Pro**: $20/month
-- **Render Starter**: $7/month (always-on, no cold starts)
-- **Gemini Pay-as-you-go**: $0.00025/1K input tokens
+- **Vercel Pro**: $20/month (higher limits, team features)
+- **Gemini Pay-as-you-go**: ~$0.10-0.50/day for moderate use
+
+**Expected cost for personal use: $0/month** (free tier is very generous)
 
 ---
 
@@ -273,36 +144,27 @@ cp .env.example .env
 # 2. Add your API keys to .env
 # GEMINI_API_KEY=your_key_here
 
-# 3. Run the startup script
-bash start.sh
+# 3. Install dependencies
+npm install
 
-# Frontend will be at: http://localhost:5173
-# Python service at: http://localhost:8000
-# Python docs at: http://localhost:8000/docs
+# 4. Run the dev server
+npm run dev
+
+# App will be at: http://localhost:5173
 ```
 
 ---
 
 ## Updating After Deployment
 
-### Update Frontend
 ```bash
 # Make changes
 git add .
-git commit -m "Update frontend"
+git commit -m "Your update message"
 git push origin main
 
 # Vercel auto-deploys on push to main
-```
-
-### Update Python Service
-```bash
-# Make changes to metrics-service/
-git add .
-git commit -m "Update metrics service"
-git push origin main
-
-# Render/Railway auto-deploys on push to main
+# No separate services to update!
 ```
 
 ---
