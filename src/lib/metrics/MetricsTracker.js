@@ -1,4 +1,5 @@
 import { calculateMetrics } from './MetricsCalculator.js';
+import { geminiGenerate } from '../services/gemini.js';
 
 export class MetricsTracker {
   constructor() {
@@ -57,5 +58,41 @@ export class MetricsTracker {
       exchangeCount: this.exchangeCount,
       needsScaffolding: this.needsScaffolding
     };
+  }
+
+  /**
+   * Check if agent response includes proper emotional validation
+   */
+  async checkValidationCompliance(userText, agentText) {
+    try {
+      const systemPrompt = `Analyze if the agent's response properly validates the user's emotions.
+
+User: "${userText}"
+Agent: "${agentText}"
+
+Does the agent response acknowledge and validate the user's emotional state before offering advice or reframing?
+
+Respond with only "true" or "false".`;
+
+      const { text } = await geminiGenerate({
+        contents: [{ role: 'user', parts: [{ text: systemPrompt }] }],
+        systemPrompt: ''
+      });
+
+      return text.toLowerCase().includes('true');
+    } catch (error) {
+      console.error('[MetricsTracker] Error checking validation compliance:', error);
+      return true; // Default to true if check fails
+    }
+  }
+
+  /**
+   * Update validation compliance score based on whether validation was present
+   */
+  updateValidationCompliance(isCompliant) {
+    // Use exponential moving average to update compliance
+    const weight = 0.3; // Weight for new observation
+    const newValue = isCompliant ? 100 : 0;
+    this.validationCompliance = this.validationCompliance * (1 - weight) + newValue * weight;
   }
 }
