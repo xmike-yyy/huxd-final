@@ -30,6 +30,12 @@ export class Orchestrator {
     let evaluation;
     let modulations = [];
 
+    // Add metric-based behavioral modulations BEFORE generating response
+    modulations = this.getMetricBasedModulations(currentMetrics, frame);
+    if (modulations.length > 0) {
+      console.log('Applying metric-based modulations:', modulations);
+    }
+
     // Retry loop with evaluation
     while (attempts < this.MAX_RETRIES) {
       attempts++;
@@ -55,7 +61,9 @@ export class Orchestrator {
 
       // If rejected and we have retries left, get modulations and try again
       if (attempts < this.MAX_RETRIES) {
-        modulations = this.evaluator.getModulations(evaluation.issues);
+        const evaluationModulations = this.evaluator.getModulations(evaluation.issues);
+        // Merge with existing metric-based modulations
+        modulations = [...new Set([...modulations, ...evaluationModulations])];
         console.log(`Response rejected (attempt ${attempts}). Retrying with modulations:`, modulations);
       }
     }
@@ -104,9 +112,16 @@ export class Orchestrator {
     }
 
     // If user pushback is high, use gentler Reflective Listener
-    if (currentMetrics.pushbackFrequency !== undefined &&
-        currentMetrics.pushbackFrequency > 5) {
+    if (currentMetrics.userPushback !== undefined &&
+        currentMetrics.userPushback > 5) {
       console.log('High user pushback detected. Using Reflective Listener.');
+      return 'reflective-listener';
+    }
+
+    // If sentiment authenticity is low (performative positivity/emotional guarding), use Reflective Listener
+    if (currentMetrics.sentimentAuthenticity !== undefined &&
+        currentMetrics.sentimentAuthenticity < 40) {
+      console.log('Low sentiment authenticity detected (emotional guarding). Using Reflective Listener.');
       return 'reflective-listener';
     }
 
@@ -150,5 +165,44 @@ export class Orchestrator {
       return `Positive state: ${analysis.emotionalState}`;
     }
     return 'Default routing';
+  }
+
+  /**
+   * Generate behavioral modulations based on current metrics
+   * This enforces the architecture's requirement to adjust frame behavior based on metrics
+   */
+  getMetricBasedModulations(currentMetrics, frame) {
+    const modulations = [];
+
+    // If no user solutions after 10+ exchanges, make Clarity Coach more directive with scaffolding
+    if (currentMetrics.needsScaffolding && frame === 'clarity-coach') {
+      modulations.push('increase_directiveness');
+      modulations.push('provide_scaffolding');
+      console.log('Needs scaffolding detected - making Clarity Coach more directive');
+    }
+
+    // If pushback is high, shift to softer language and more questions
+    if (currentMetrics.userPushback !== undefined && currentMetrics.userPushback > 5) {
+      modulations.push('increase_questions');
+      modulations.push('soften_language');
+      modulations.push('reduce_imperatives');
+      console.log('High pushback detected - using softer, more questioning approach');
+    }
+
+    // If question ratio is too low, increase questions
+    if (currentMetrics.questionRatio !== undefined && currentMetrics.questionRatio < 30) {
+      modulations.push('increase_questions');
+      console.log('Low question ratio - encouraging more Socratic approach');
+    }
+
+    // If sentiment authenticity is low, increase empathy and validation
+    if (currentMetrics.sentimentAuthenticity !== undefined &&
+        currentMetrics.sentimentAuthenticity < 40) {
+      modulations.push('increase_empathy');
+      modulations.push('add_validation_first');
+      console.log('Low sentiment authenticity - prioritizing validation');
+    }
+
+    return [...new Set(modulations)]; // Remove duplicates
   }
 }

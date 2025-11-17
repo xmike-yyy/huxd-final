@@ -66,6 +66,12 @@ export class BaseAgent {
         case 'softer_language':
           modulatedPrompt += '\n- Use gentler, less enthusiastic language. Acknowledge difficulty.';
           break;
+        case 'increase_directiveness':
+          modulatedPrompt += '\n- Be more directive and concrete in your guidance. User needs structure.';
+          break;
+        case 'provide_scaffolding':
+          modulatedPrompt += '\n- Provide scaffolding: break down thinking into small, manageable steps.';
+          break;
       }
     });
 
