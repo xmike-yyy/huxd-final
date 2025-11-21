@@ -4,7 +4,7 @@ import { MetricsTracker } from '$lib/metrics/MetricsTracker.js';
 
 export async function POST({ request }) {
   try {
-    const { history } = await request.json();
+    const { history, sessionId, previousMetrics } = await request.json();
 
     if (!Array.isArray(history)) {
       return json({ error: 'history array required' }, { status: 400 });
@@ -16,45 +16,34 @@ export async function POST({ request }) {
       parts: [{ text: m.content }]
     }));
 
-    // Calculate metrics
-    const metricsTracker = new MetricsTracker();
-    await metricsTracker.calculate(contents);
+    // Get last user message (the NEW message we're responding to)
+    const lastUserMessage = contents[contents.length - 1]?.parts?.[0]?.text || '';
 
-    // Calculate validation compliance for ALL exchanges in conversation history
-    for (let i = 0; i < contents.length - 1; i++) {
-      if (contents[i].role === 'user' && contents[i + 1].role === 'model') {
-        const userText = contents[i].parts?.[0]?.text || '';
-        const agentText = contents[i + 1].parts?.[0]?.text || '';
-        const isCompliant = await metricsTracker.checkValidationCompliance(userText, agentText);
-        metricsTracker.updateValidationCompliance(isCompliant);
-      }
-    }
+    // Initialize metrics tracker with previous state (conversation-specific)
+    const metricsTracker = new MetricsTracker(previousMetrics);
 
-    // Get current metrics for orchestrator
+    // Only update metrics with the NEW user message (no assistant response yet)
+    // We'll update again after we get the assistant response
     const currentMetrics = metricsTracker.toJSON();
+
+    console.log(`[Chat API] Session ${sessionId}: Exchange ${currentMetrics.exchangeCount + 1}`);
+    console.log('[Chat API] Current metrics:', currentMetrics);
 
     // Orchestrate response with current metrics
     const orchestrator = new Orchestrator();
     const result = await orchestrator.orchestrate(contents, currentMetrics);
 
-    // Check validation compliance for the NEW exchange
-    const lastUserMessage = contents.filter((c) => c.role === 'user').pop();
-    if (lastUserMessage) {
-      const userText = lastUserMessage.parts?.[0]?.text || '';
-      const agentText = result.assistantMessage;
-      const isCompliant = await metricsTracker.checkValidationCompliance(userText, agentText);
-      metricsTracker.updateValidationCompliance(isCompliant);
-    }
-
-    const metrics = metricsTracker.toJSON();
+    // Now update metrics with the complete exchange (user + assistant)
+    metricsTracker.updateWithNewExchange(lastUserMessage, result.assistantMessage);
+    const updatedMetrics = metricsTracker.toJSON();
 
     return json({
       assistantMessage: result.assistantMessage,
       frame: result.frame,
       reason: result.reason,
-      metrics: metrics,
+      metrics: updatedMetrics,
       inputAnalysis: result.inputAnalysis,
-      evaluation: result.evaluation // Include evaluation results
+      evaluation: result.evaluation
     });
   } catch (err) {
     console.error('Chat API error:', err);

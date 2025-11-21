@@ -18,21 +18,33 @@ export class ResponseEvaluator {
    * @returns {object} Evaluation result with acceptance status and issues
    */
   async evaluate(agentResponse, userMessage, currentMetrics, selectedFrame) {
+    // Local checks (no API calls)
+    const questionRatio = this.calculateQuestionRatio(agentResponse);
+    const sentenceCount = this.countSentences(agentResponse);
+    const localToxicPhrases = this.checkLocalToxicPhrases(agentResponse);
+
+    // Single consolidated LLM call for all quality checks
+    const llmChecks = await this.performConsolidatedCheck(
+      agentResponse,
+      userMessage,
+      currentMetrics,
+      selectedFrame,
+      questionRatio,
+      localToxicPhrases
+    );
+
     const issues = [];
 
-    // Check for validation compliance
-    const validationCheck = await this.checkValidation(agentResponse, userMessage, currentMetrics);
-    if (!validationCheck.passed) {
+    // Process results from consolidated check
+    if (!llmChecks.validationCheck.passed) {
       issues.push({
         type: 'MISSING_VALIDATION',
         severity: 'HIGH',
         fix: 'Add emotional validation before suggestions or reframing',
-        details: validationCheck.reason
+        details: llmChecks.validationCheck.reason
       });
     }
 
-    // Check question ratio in response
-    const questionRatio = this.calculateQuestionRatio(agentResponse);
     if (selectedFrame === 'clarity-coach' && questionRatio < 0.5) {
       issues.push({
         type: 'TOO_DIRECTIVE',
@@ -42,19 +54,15 @@ export class ResponseEvaluator {
       });
     }
 
-    // Check for toxic positivity
-    const toxicPositivityCheck = await this.checkToxicPositivity(agentResponse);
-    if (toxicPositivityCheck.detected) {
+    if (llmChecks.toxicPositivityCheck.detected || localToxicPhrases.length > 0) {
       issues.push({
         type: 'TOXIC_POSITIVITY',
         severity: 'HIGH',
         fix: 'Remove dismissive or overly positive phrases that invalidate emotions',
-        details: toxicPositivityCheck.phrases.join(', ')
+        details: [...localToxicPhrases, ...llmChecks.toxicPositivityCheck.examples].join(', ')
       });
     }
 
-    // Check response length (not too overwhelming)
-    const sentenceCount = this.countSentences(agentResponse);
     if (sentenceCount > 6) {
       issues.push({
         type: 'TOO_LONG',
@@ -64,17 +72,13 @@ export class ResponseEvaluator {
       });
     }
 
-    // Check for unsolicited advice (especially if user is in distress)
-    if (currentMetrics.sentimentAuthenticity < 40) {
-      const adviceCheck = await this.checkUnsolicitedAdvice(agentResponse, userMessage);
-      if (adviceCheck.detected && !adviceCheck.validated) {
-        issues.push({
-          type: 'UNSOLICITED_ADVICE',
-          severity: 'MEDIUM',
-          fix: 'Focus on validation and listening before offering solutions',
-          details: 'User showing low sentiment authenticity - prioritize emotional support'
-        });
-      }
+    if (currentMetrics.sentimentAuthenticity < 40 && llmChecks.adviceCheck.detected && !llmChecks.adviceCheck.validated) {
+      issues.push({
+        type: 'UNSOLICITED_ADVICE',
+        severity: 'MEDIUM',
+        fix: 'Focus on validation and listening before offering solutions',
+        details: 'User showing low sentiment authenticity - prioritize emotional support'
+      });
     }
 
     return {
@@ -82,35 +86,54 @@ export class ResponseEvaluator {
       issues,
       score: this.calculateScore(issues),
       metrics: {
-        validationPresent: validationCheck.passed,
+        validationPresent: llmChecks.validationCheck.passed,
         questionRatio: questionRatio,
-        toxicPositivityDetected: toxicPositivityCheck.detected,
+        toxicPositivityDetected: llmChecks.toxicPositivityCheck.detected || localToxicPhrases.length > 0,
         sentenceCount: sentenceCount
       }
     };
   }
 
   /**
-   * Check if response includes proper emotional validation
+   * Perform all LLM-based checks in a single consolidated call
    */
-  async checkValidation(agentResponse, userMessage, currentMetrics) {
-    const prompt = `
-Analyze if the agent's response properly validates the user's emotions before offering advice or reframing.
+  async performConsolidatedCheck(agentResponse, userMessage, currentMetrics, selectedFrame, questionRatio, localToxicPhrases) {
+    const prompt = `You are evaluating a mental wellness agent's response for quality and safety.
 
 User Message: "${userMessage}"
 Agent Response: "${agentResponse}"
+Selected Frame: ${selectedFrame}
+Current Metrics: ${JSON.stringify(currentMetrics)}
 
-Does the agent response:
-1. Acknowledge the user's emotional state?
-2. Validate feelings before suggesting solutions?
-3. Show empathy and understanding?
+Perform the following checks and respond in JSON format:
 
-Respond in JSON format:
+1. VALIDATION CHECK: Does the agent response acknowledge and validate the user's emotional state before offering advice or reframing?
+
+2. TOXIC POSITIVITY CHECK: Look for:
+   - Dismissing or minimizing emotions
+   - Forcing positivity when validation is needed
+   - Suggesting emotions are a choice when they're not
+   - Comparing suffering ("it could be worse")
+   - Spiritual bypassing
+
+3. UNSOLICITED ADVICE CHECK: ${currentMetrics.sentimentAuthenticity < 40 ? 'Does the response include advice without proper validation first?' : 'Skip this check'}
+
+Respond in this exact JSON format:
 {
-  "passed": true/false,
-  "reason": "explanation"
-}
-`;
+  "validationCheck": {
+    "passed": true/false,
+    "reason": "explanation"
+  },
+  "toxicPositivityCheck": {
+    "detected": true/false,
+    "confidence": 0-100,
+    "examples": ["phrase1", "phrase2"]
+  },
+  "adviceCheck": {
+    "detected": true/false,
+    "validated": true/false
+  }
+}`;
 
     try {
       const request = {
@@ -124,25 +147,21 @@ Respond in JSON format:
         return JSON.parse(jsonMatch[0]);
       }
     } catch (error) {
-      console.error('Validation check error:', error);
+      console.error('Consolidated evaluation error:', error);
     }
 
-    return { passed: true, reason: 'Unable to evaluate' };
+    // Fallback if check fails
+    return {
+      validationCheck: { passed: true, reason: 'Unable to evaluate' },
+      toxicPositivityCheck: { detected: false, confidence: 0, examples: [] },
+      adviceCheck: { detected: false, validated: true }
+    };
   }
 
   /**
-   * Calculate question-to-statement ratio
+   * Check for toxic positivity phrases locally (no API call)
    */
-  calculateQuestionRatio(text) {
-    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    const questions = sentences.filter(s => s.includes('?'));
-    return sentences.length > 0 ? questions.length / sentences.length : 0;
-  }
-
-  /**
-   * Check for toxic positivity phrases
-   */
-  async checkToxicPositivity(agentResponse) {
+  checkLocalToxicPhrases(agentResponse) {
     const toxicPhrases = [
       'just think positive',
       'look on the bright side',
@@ -157,94 +176,21 @@ Respond in JSON format:
       'don\'t be negative'
     ];
 
-    const detectedPhrases = toxicPhrases.filter(phrase =>
+    return toxicPhrases.filter(phrase =>
       agentResponse.toLowerCase().includes(phrase)
     );
-
-    // Also use LLM for more nuanced detection
-    const prompt = `
-Analyze this mental wellness agent response for toxic positivity - dismissive optimism that invalidates genuine emotions.
-
-Response: "${agentResponse}"
-
-Look for:
-- Dismissing or minimizing emotions
-- Forcing positivity when validation is needed
-- Suggesting emotions are a choice when they're not
-- Comparing suffering ("it could be worse")
-- Spiritual bypassing
-
-Respond in JSON:
-{
-  "detected": true/false,
-  "confidence": 0-100,
-  "examples": ["phrase1", "phrase2"]
-}
-`;
-
-    try {
-      const request = {
-        model: this.modelName,
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
-      };
-      const result = await this.ai.models.generateContent(request);
-      const text = typeof result?.text === 'string' ? result.text : '';
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const llmResult = JSON.parse(jsonMatch[0]);
-        return {
-          detected: detectedPhrases.length > 0 || llmResult.detected,
-          phrases: [...detectedPhrases, ...llmResult.examples]
-        };
-      }
-    } catch (error) {
-      console.error('Toxic positivity check error:', error);
-    }
-
-    return {
-      detected: detectedPhrases.length > 0,
-      phrases: detectedPhrases
-    };
   }
+
 
   /**
-   * Check for unsolicited advice
+   * Calculate question-to-statement ratio
    */
-  async checkUnsolicitedAdvice(agentResponse, userMessage) {
-    const prompt = `
-Analyze if the agent gives advice without first validating emotions.
-
-User Message: "${userMessage}"
-Agent Response: "${agentResponse}"
-
-Determine:
-1. Does the response include advice or suggestions?
-2. Was validation provided before the advice?
-
-Respond in JSON:
-{
-  "detected": true/false (advice given),
-  "validated": true/false (validation present first)
-}
-`;
-
-    try {
-      const request = {
-        model: this.modelName,
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
-      };
-      const result = await this.ai.models.generateContent(request);
-      const text = typeof result?.text === 'string' ? result.text : '';
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-    } catch (error) {
-      console.error('Advice check error:', error);
-    }
-
-    return { detected: false, validated: true };
+  calculateQuestionRatio(text) {
+    const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    const questions = sentences.filter(s => s.includes('?'));
+    return sentences.length > 0 ? questions.length / sentences.length : 0;
   }
+
 
   /**
    * Count sentences in text

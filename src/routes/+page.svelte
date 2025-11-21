@@ -54,11 +54,19 @@
     isLoading = true;
 
     try {
-      // Call API
+      // Get current session ID and metrics (conversation-specific)
+      const sessionId = $conversations.currentSessionId;
+      const previousMetrics = currentSession?.metrics || null;
+
+      // Call API with session ID and previous metrics
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ history: messages.concat([userMessage]) })
+        body: JSON.stringify({
+          history: messages.concat([userMessage]),
+          sessionId: sessionId,
+          previousMetrics: previousMetrics
+        })
       });
 
       const data = await res.json();
@@ -75,6 +83,11 @@
         timestamp: new Date().toISOString()
       };
       conversations.addMessage(assistantMessage);
+
+      // Update session metrics with the new metrics from the response
+      if (data.metrics && sessionId) {
+        conversations.updateSessionMetrics(sessionId, data.metrics);
+      }
     } catch (err) {
       console.error('Send error:', err);
       alert('Failed to send message: ' + err.message);

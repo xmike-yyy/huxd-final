@@ -71,7 +71,20 @@ function createConversationsStore() {
               messages: [],
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
-              title: 'New Conversation'
+              title: 'New Conversation',
+              metrics: {
+                sentimentAuthenticity: 50,
+                questionRatio: 50,
+                validationCompliance: 100,
+                userPushback: 0,
+                userSolutionsCount: 0,
+                exchangeCount: 0,
+                needsScaffolding: false,
+                // Running state for incremental calculation
+                _recentUserMessages: [],
+                _validationStats: { totalReframes: 0, compliantReframes: 0 },
+                _questionStats: { totalSentences: 0, questionCount: 0 }
+              }
             }
           },
           currentSessionId: sessionId
@@ -234,6 +247,32 @@ function createConversationsStore() {
               ...sessions[sessionId],
               title,
               updatedAt: new Date().toISOString()
+            }
+          }
+        };
+      });
+    },
+
+    /**
+     * Update metrics for a session
+     * @param {string} sessionId - The session to update
+     * @param {object} metrics - The updated metrics
+     */
+    updateSessionMetrics: (sessionId, metrics) => {
+      update(state => {
+        const { sessions } = state;
+
+        if (!sessions[sessionId]) {
+          return state;
+        }
+
+        return {
+          ...state,
+          sessions: {
+            ...sessions,
+            [sessionId]: {
+              ...sessions[sessionId],
+              metrics
             }
           }
         };

@@ -12,7 +12,6 @@ export class Orchestrator {
       'momentum-partner': new MomentumPartner()
     };
     this.evaluator = new ResponseEvaluator();
-    this.MAX_RETRIES = 3;
   }
 
   async orchestrate(contents, currentMetrics = {}) {
@@ -23,30 +22,59 @@ export class Orchestrator {
     const lastUserMessage = contents[contents.length - 1]?.parts?.[0]?.text || '';
 
     // Select frame based on emotional state and metrics
-    let frame = this.selectFrame(analysis, currentMetrics);
-
-    let attempts = 0;
-    let response;
-    let evaluation;
-    let modulations = [];
+    const frame = this.selectFrame(analysis, currentMetrics);
 
     // Add metric-based behavioral modulations BEFORE generating response
-    modulations = this.getMetricBasedModulations(currentMetrics, frame);
+    let modulations = this.getMetricBasedModulations(currentMetrics, frame);
     if (modulations.length > 0) {
       console.log('Applying metric-based modulations:', modulations);
     }
 
-    // Retry loop with evaluation
-    while (attempts < this.MAX_RETRIES) {
-      attempts++;
+    // Get agent
+    const agent = this.agents[frame];
 
-      // Get agent with modulations applied
-      const agent = this.agents[frame];
+    // First attempt: Generate response
+    let response = await agent.respond(contents, modulations);
 
-      // Generate response (with modulations if retrying)
-      response = await agent.respond(contents, modulations);
+    // Evaluate response quality
+    let evaluation = await this.evaluator.evaluate(
+      response.text,
+      lastUserMessage,
+      currentMetrics,
+      frame
+    );
 
-      // Evaluate response quality
+    let retried = false;
+
+    // If rejected, retry ONCE with context about why it was rejected
+    if (!evaluation.accepted) {
+      console.log('Response rejected. Retrying with rejection context...');
+      console.log('Issues found:', evaluation.issues);
+
+      // Build rejection context to add to the conversation
+      const rejectionContext = this.buildRejectionContext(evaluation.issues);
+
+      // Add rejection feedback as a system message to the conversation
+      const contentsWithFeedback = [
+        ...contents,
+        {
+          role: 'model',
+          parts: [{ text: response.text }]
+        },
+        {
+          role: 'user',
+          parts: [{ text: rejectionContext }]
+        }
+      ];
+
+      // Get modulations from evaluation issues
+      const evaluationModulations = this.evaluator.getModulations(evaluation.issues);
+      modulations = [...new Set([...modulations, ...evaluationModulations])];
+
+      // Retry with feedback
+      response = await agent.respond(contentsWithFeedback, modulations);
+
+      // Re-evaluate
       evaluation = await this.evaluator.evaluate(
         response.text,
         lastUserMessage,
@@ -54,34 +82,7 @@ export class Orchestrator {
         frame
       );
 
-      // If accepted, break out of retry loop
-      if (evaluation.accepted) {
-        break;
-      }
-
-      // If rejected and we have retries left, get modulations and try again
-      if (attempts < this.MAX_RETRIES) {
-        const evaluationModulations = this.evaluator.getModulations(evaluation.issues);
-        // Merge with existing metric-based modulations
-        modulations = [...new Set([...modulations, ...evaluationModulations])];
-        console.log(`Response rejected (attempt ${attempts}). Retrying with modulations:`, modulations);
-      }
-    }
-
-    // If all retries failed, fallback to Reflective Listener
-    if (!evaluation.accepted && frame !== 'reflective-listener') {
-      console.log('All retries failed. Falling back to Reflective Listener.');
-      frame = 'reflective-listener';
-      const fallbackAgent = this.agents[frame];
-      response = await fallbackAgent.respond(contents, ['focus_on_validation', 'increase_empathy']);
-
-      // Re-evaluate fallback
-      evaluation = await this.evaluator.evaluate(
-        response.text,
-        lastUserMessage,
-        currentMetrics,
-        frame
-      );
+      retried = true;
     }
 
     return {
@@ -92,11 +93,33 @@ export class Orchestrator {
       evaluation: {
         accepted: evaluation.accepted,
         score: evaluation.score,
-        attempts: attempts,
         issues: evaluation.issues,
-        metrics: evaluation.metrics
+        metrics: evaluation.metrics,
+        retried: retried
       }
     };
+  }
+
+  /**
+   * Build human-readable rejection context to help the agent fix issues
+   */
+  buildRejectionContext(issues) {
+    if (!issues || issues.length === 0) {
+      return '[INTERNAL FEEDBACK] Please revise your previous response to better align with therapeutic best practices.';
+    }
+
+    let context = '[INTERNAL FEEDBACK] Your previous response had the following issues that need to be addressed:\n\n';
+
+    issues.forEach((issue, index) => {
+      context += `${index + 1}. ${issue.type}: ${issue.fix}\n`;
+      if (issue.details) {
+        context += `   Details: ${issue.details}\n`;
+      }
+    });
+
+    context += '\nPlease generate a revised response that addresses these issues while maintaining your therapeutic approach.';
+
+    return context;
   }
 
   selectFrame(analysis, currentMetrics = {}) {

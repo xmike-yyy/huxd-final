@@ -1,0 +1,60 @@
+{
+  "reflective-listener": {
+    "description": "Triggered by negative emotions, frustration, overwhelm, anxiety, or sadness",
+    "starters": [
+      "I'm feeling really overwhelmed with everything right now. It's like nothing is going right.",
+      "I'm so frustrated. I keep trying but it feels like I'm stuck in the same place.",
+      "I'm anxious about everything lately. I can't seem to shake this feeling.",
+      "I'm just so tired of feeling this way. It's been really hard.",
+      "I feel like I'm failing at everything I try to do.",
+      "I'm struggling to keep it together today. Everything feels too heavy.",
+      "I'm angry at myself for not being better at this.",
+      "I don't know how much longer I can keep going like this."
+    ]
+  },
+  "clarity-coach": {
+    "description": "Triggered by confusion, uncertainty, ambivalence, or seeking advice",
+    "starters": [
+      "I'm not sure what to do about my daily routine. It feels all over the place.",
+      "I'm confused about what direction I should take. There are too many options.",
+      "I know I need to change something, but I don't know where to start.",
+      "I'm uncertain about whether I'm making the right choices.",
+      "I keep flip-flopping between different ideas. I can't decide what's best.",
+      "I feel stuck but I'm not sure what's blocking me.",
+      "I'm trying to figure out what I actually want, but it's unclear.",
+      "I have all these thoughts but they don't connect into anything actionable."
+    ]
+  },
+  "momentum-partner": {
+    "description": "Triggered by positive emotions, celebrating, feeling motivated or hopeful",
+    "starters": [
+      "I actually made progress on something today! I'm feeling pretty good about it.",
+      "I'm starting to feel hopeful about where things are heading.",
+      "I tried something new and it went better than expected!",
+      "I'm feeling motivated to keep building on what I started.",
+      "I finally completed something I've been putting off. Feels great!",
+      "I'm proud of myself for showing up today even when it was hard.",
+      "Things are looking up! I want to keep this momentum going.",
+      "I had a small win today and I want to celebrate it."
+    ]
+  },
+  "edge-cases": {
+    "description": "Prompts that might trigger metric-based overrides or special behaviors",
+    "low-sentiment-authenticity": [
+      "I'm fine. Everything's fine. No worries.",
+      "It's all good. Just dealing with stuff, you know.",
+      "I'm okay, I guess. It's whatever."
+    ],
+    "needs-scaffolding": [
+      "I've been talking about this for weeks but I still haven't done anything.",
+      "I know what I need to do but I just can't seem to start.",
+      "Every time I think about it, I get overwhelmed and give up."
+    ],
+    "high-pushback": [
+      "Yeah but that won't work for me.",
+      "I tried that already and it didn't help.",
+      "That's easier said than done.",
+      "You don't understand, my situation is different."
+    ]
+  }
+}
