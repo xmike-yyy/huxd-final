@@ -1028,7 +1028,6 @@
         type="text"
         placeholder={sttSupported ? (isRecording ? 'Listening...' : 'Press record and speak') : 'Voice not supported, type your message'}
         bind:value={input}
-        readonly={sttSupported}
         on:keydown={(e) => !sttSupported && e.key === 'Enter' && send()}
         disabled={isLoading}
       />
