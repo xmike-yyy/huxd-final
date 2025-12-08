@@ -1,4 +1,5 @@
 // Client for calling Python metrics service
+import { withRetry } from './retry.js';
 
 const METRICS_SERVICE_URL = 'http://localhost:8000';
 
@@ -9,16 +10,30 @@ export class MetricsServiceClient {
 
   async callEndpoint(endpoint, data) {
     try {
-      const res = await fetch(`${this.baseUrl}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.detail || 'Metrics service error');
-      }
+      const res = await withRetry(
+        () =>
+          fetch(`${this.baseUrl}${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          }).then(async (r) => {
+            if (!r.ok) {
+              // Try to parse error, else throw generic
+              let detail = 'Metrics service error';
+              try {
+                const errJson = await r.json();
+                detail = errJson?.detail || detail;
+              } catch {
+                // ignore
+              }
+              const e = new Error(detail);
+              e.status = r.status;
+              throw e;
+            }
+            return r;
+          }),
+        { retries: 2, delayMs: 300, factor: 2 }
+      );
 
       return await res.json();
     } catch (error) {
@@ -55,7 +70,10 @@ export class MetricsServiceClient {
   }
 
   async healthCheck() {
-    const res = await fetch(`${this.baseUrl}/health`);
+    const res = await withRetry(
+      () => fetch(`${this.baseUrl}/health`),
+      { retries: 2, delayMs: 300, factor: 2 }
+    );
     return res.json();
   }
 }

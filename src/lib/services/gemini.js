@@ -1,5 +1,6 @@
 import { env } from '$env/dynamic/private';
 import { GoogleGenAI } from '@google/genai';
+import { withRetry } from './retry.js';
 
 export async function geminiGenerate({ contents, systemPrompt = '', config = {} }) {
   const key = env.GEMINI_API_KEY;
@@ -20,7 +21,14 @@ export async function geminiGenerate({ contents, systemPrompt = '', config = {} 
     config: config
   };
 
-  const response = await ai.models.generateContent(request);
+  const response = await withRetry(
+    () => ai.models.generateContent(request),
+    {
+      retries: 2,
+      delayMs: 300,
+      factor: 2
+    }
+  );
   const text = typeof response?.text === 'string' ? response.text : '';
 
   return { text, raw: response };

@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { conversations } from '$lib/stores/conversations.js';
   import { reflections } from '$lib/stores/reflections.js';
+  import { withRetry } from '$lib/services/retry.js';
 
   let input = '';
   let isLoading = false;
@@ -10,6 +11,14 @@
   let deleteConfirmSessionId = null;
   let renameSessionId = null;
   let renameInput = '';
+  let isRecording = false;
+  let recognition = null;
+  let sttSupported = false;
+  let chatContainerEl = null;
+  let selectionVisible = false;
+  let selectionText = '';
+  let selectionTop = 0;
+  let selectionLeft = 0;
 
   // Reactive variables from store
   $: currentSession = $conversations.currentSessionId
@@ -35,8 +44,127 @@
       now = Date.now();
     }, 30000);
 
+    // Setup speech recognition if available
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      sttSupported = true;
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + ' ';
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        // Show both for UX; send will use the combined text
+        input = (input + ' ' + finalTranscript + interimTranscript).trim();
+      };
+
+      recognition.onerror = () => {
+        isRecording = false;
+      };
+
+      recognition.onend = () => {
+        isRecording = false;
+      };
+    }
+
     return () => clearInterval(interval);
   });
+
+  function startRecording() {
+    if (!sttSupported || isRecording) return;
+    input = ''; // reset for a fresh message
+    isRecording = true;
+    try {
+      recognition?.start();
+    } catch {
+      isRecording = false;
+    }
+  }
+
+  function stopRecording() {
+    if (!sttSupported || !isRecording) return;
+    try {
+      recognition?.stop();
+    } catch {
+      // ignore
+    } finally {
+      isRecording = false;
+    }
+  }
+
+  function toggleRecording() {
+    if (isRecording) stopRecording();
+    else startRecording();
+  }
+
+  function speakText(text) {
+    try {
+      const utterance = new SpeechSynthesisUtterance(text);
+      window.speechSynthesis?.speak(utterance);
+    } catch {
+      // no-op
+    }
+  }
+
+  function onChatMouseUp() {
+    // Defer to allow selection to register
+    setTimeout(() => {
+      const sel = window.getSelection && window.getSelection();
+      const text = sel ? sel.toString().trim() : '';
+      if (!chatContainerEl || !sel || !text) {
+        selectionVisible = false;
+        return;
+      }
+      const anchorOk = chatContainerEl.contains(sel.anchorNode);
+      const focusOk = chatContainerEl.contains(sel.focusNode);
+      if (!anchorOk || !focusOk) {
+        selectionVisible = false;
+        return;
+      }
+      try {
+        const range = sel.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        const containerRect = chatContainerEl.getBoundingClientRect();
+        // Position the toolbar slightly above the selection start
+        selectionTop = Math.max(8, rect.top - containerRect.top - 36);
+        selectionLeft = Math.min(
+          Math.max(8, rect.left - containerRect.left),
+          (containerRect.width - 160) // keep within container
+        );
+        selectionText = text;
+        selectionVisible = true;
+      } catch {
+        selectionVisible = false;
+      }
+    }, 0);
+  }
+
+  function addSelectionToReflection() {
+    if (!selectionText) return;
+    const quote = `“${selectionText}”`;
+    reflectionInput = reflectionInput ? `${reflectionInput}\n\n${quote}` : quote;
+    showReflectionModal = true;
+    selectionVisible = false;
+    try {
+      window.getSelection()?.removeAllRanges();
+    } catch {
+      // ignore
+    }
+  }
+
+  function clearSelectionToolbar() {
+    selectionVisible = false;
+  }
 
   async function send() {
     if (!input.trim() || isLoading) return;
@@ -52,28 +180,30 @@
     const userInput = input;
     input = '';
     isLoading = true;
+    stopRecording();
 
     try {
       // Get current session ID and metrics (conversation-specific)
       const sessionId = $conversations.currentSessionId;
       const previousMetrics = currentSession?.metrics || null;
 
-      // Call API with session ID and previous metrics
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          history: messages.concat([userMessage]),
-          sessionId: sessionId,
-          previousMetrics: previousMetrics
-        })
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Request failed');
-      }
+      // Call API with session ID and previous metrics (with auto-retry)
+      const data = await withRetry(async () => {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            history: messages.concat([userMessage]),
+            sessionId: sessionId,
+            previousMetrics: previousMetrics
+          })
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          throw new Error(body.error || 'Request failed');
+        }
+        return body;
+      }, { retries: 2, delayMs: 300, factor: 2 });
 
       // Add assistant message with timestamp
       const assistantMessage = {
@@ -83,6 +213,7 @@
         timestamp: new Date().toISOString()
       };
       conversations.addMessage(assistantMessage);
+      speakText(data.assistantMessage);
 
       // Update session metrics with the new metrics from the response
       if (data.metrics && sessionId) {
@@ -334,6 +465,9 @@
 
   .header {
     margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 
   .logo {
@@ -349,6 +483,20 @@
     font-size: 2.5rem;
   }
 
+  .header-actions .about-btn {
+    background: white;
+    color: #667eea;
+    padding: 0.5rem 1rem;
+    border-radius: 10px;
+    text-decoration: none;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+
+  .header-actions .about-btn:hover {
+    background: #eef2ff;
+  }
+
   .chat-container {
     flex: 1;
     background: white;
@@ -360,6 +508,7 @@
     gap: 1rem;
     min-height: 0;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    position: relative;
   }
 
   .message-wrapper {
@@ -610,6 +759,30 @@
     padding: 2rem 1rem;
   }
 
+  /* Selection toolbar */
+  .selection-toolbar {
+    position: absolute;
+    background: #1f2937;
+    color: white;
+    border-radius: 10px;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+    display: inline-flex;
+    gap: 0.5rem;
+    align-items: center;
+    z-index: 10;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  }
+  .selection-toolbar button {
+    background: #667eea;
+    padding: 0.4rem 0.6rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+  }
+  .selection-toolbar button:hover {
+    background: #5568d3;
+  }
+
   /* Modal */
   .modal-overlay {
     position: fixed;
@@ -793,9 +966,21 @@
         <span class="flower">✳</span>
         <span>B-Me</span>
       </div>
+      <div class="header-actions">
+        <a class="about-btn" href="/about">About</a>
+      </div>
     </div>
 
-    <div class="chat-container">
+    <div class="chat-container" bind:this={chatContainerEl} on:mouseup={onChatMouseUp} on:scroll={clearSelectionToolbar}>
+      {#if selectionVisible}
+        <div
+          class="selection-toolbar"
+          style={`top:${selectionTop}px;left:${selectionLeft}px;`}
+        >
+          <span>Add to reflections?</span>
+          <button on:click={addSelectionToReflection}>Add</button>
+        </div>
+      {/if}
       {#if messages.length === 0}
         <div class="empty-state">
           <h2>Start a conversation</h2>
@@ -836,11 +1021,15 @@
     </div>
 
     <div class="input-container">
+      <button on:click={toggleRecording} disabled={isLoading}>
+        {#if isRecording}⏹ Stop{:else}🎙️ Record{/if}
+      </button>
       <input
         type="text"
-        placeholder="Type your thought..."
+        placeholder={sttSupported ? (isRecording ? 'Listening...' : 'Press record and speak') : 'Voice not supported, type your message'}
         bind:value={input}
-        on:keydown={(e) => e.key === 'Enter' && send()}
+        readonly={sttSupported}
+        on:keydown={(e) => !sttSupported && e.key === 'Enter' && send()}
         disabled={isLoading}
       />
       <button on:click={send} disabled={isLoading || !input.trim()}>Send</button>
@@ -876,27 +1065,24 @@
       <button class="start-btn" on:click={() => (showReflectionModal = true)}>
         🖊 Start writing...
       </button>
+      {#if showReflectionModal}
+        <div style="margin-top: 1rem;">
+          <textarea
+            bind:value={reflectionInput}
+            placeholder="What's on your mind? Write down your thoughts, insights, or feelings..."
+            style="width: 100%; min-height: 120px; padding: 1rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; font-family: inherit; outline: none; box-sizing: border-box;"
+          ></textarea>
+          <div class="modal-actions" style="margin-top: 0.75rem;">
+            <button class="cancel-btn" on:click={() => { showReflectionModal = false; reflectionInput = ''}}>Cancel</button>
+            <button on:click={saveReflection}>Save Reflection</button>
+          </div>
+        </div>
+      {/if}
     </div>
   </div>
 </div>
 
-<!-- Reflection Modal -->
-{#if showReflectionModal}
-  <div class="modal-overlay" on:click={() => (showReflectionModal = false)}>
-    <div class="modal" on:click|stopPropagation>
-      <h3>Add Reflection</h3>
-      <textarea
-        bind:value={reflectionInput}
-        placeholder="What's on your mind? Write down your thoughts, insights, or feelings..."
-        autofocus
-      ></textarea>
-      <div class="modal-actions">
-        <button class="cancel-btn" on:click={() => (showReflectionModal = false)}>Cancel</button>
-        <button on:click={saveReflection}>Save Reflection</button>
-      </div>
-    </div>
-  </div>
-{/if}
+<!-- Removed blocking Reflection Modal; editor is inline in the right panel -->
 
 <!-- Delete Confirmation Modal -->
 {#if deleteConfirmSessionId}
