@@ -27,7 +27,7 @@ export {};
 
 declare module "$app/types" {
 	export interface AppTypes {
-		RouteId(): "/" | "/about" | "/api" | "/api/chat" | "/{api";
+		RouteId(): "/" | "/about" | "/api" | "/api/chat" | "/{api" | "/{api/chat}" | "/{api/metrics}" | "/{api/reflection}";
 		RouteParams(): {
 			
 		};
@@ -36,9 +36,12 @@ declare module "$app/types" {
 			"/about": Record<string, never>;
 			"/api": Record<string, never>;
 			"/api/chat": Record<string, never>;
-			"/{api": Record<string, never>
+			"/{api": Record<string, never>;
+			"/{api/chat}": Record<string, never>;
+			"/{api/metrics}": Record<string, never>;
+			"/{api/reflection}": Record<string, never>
 		};
-		Pathname(): "/" | "/about" | "/about/" | "/api" | "/api/" | "/api/chat" | "/api/chat/" | "/{api" | "/{api/";
+		Pathname(): "/" | "/about" | "/about/" | "/api" | "/api/" | "/api/chat" | "/api/chat/" | "/{api" | "/{api/" | "/{api/chat}" | "/{api/chat}/" | "/{api/metrics}" | "/{api/metrics}/" | "/{api/reflection}" | "/{api/reflection}/";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): string & {};
 	}

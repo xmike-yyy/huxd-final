@@ -15,7 +15,6 @@
 	export let data_1 = null;
 
 	if (!browser) {
-		// svelte-ignore state_referenced_locally
 		setContext('__svelte__', stores);
 	}
 

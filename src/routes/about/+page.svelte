@@ -10,9 +10,32 @@
     margin: 0 auto;
     padding: 2rem 1.5rem;
     color: #1e293b;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
+  .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #667eea;
+    color: white;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: background 0.2s;
+    margin-right: 1.5rem;
+  }
+  .back-btn:hover {
+    background: #5568d3;
+    text-decoration: none;
   }
   h1 {
-    margin: 0 0 0.5rem 0;
+    margin: 0;
   }
   .lead {
     color: #64748b;
@@ -24,6 +47,7 @@
     border-radius: 12px;
     padding: 1.25rem;
     margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
   }
   a {
     color: #667eea;
@@ -35,7 +59,15 @@
 </style>
 
 <div class="about">
-  <h1>About Us</h1>
+  <div class="header">
+    <a href="/" class="back-btn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M19 12H5M12 19l-7-7 7-7"/>
+      </svg>
+      Back to Chat
+    </a>
+    <h1>About Us</h1>
+  </div>
   <p class="lead">B‑Me is a supportive, adaptive companion focused on clarity, validation, and momentum.</p>
 
   <div class="card">

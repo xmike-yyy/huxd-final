@@ -4,7 +4,7 @@ import { MetricsTracker } from '$lib/metrics/MetricsTracker.js';
 
 export async function POST({ request }) {
   try {
-    const { history, sessionId, previousMetrics } = await request.json();
+    const { history, sessionId, previousMetrics, reflectionContext } = await request.json();
 
     if (!Array.isArray(history)) {
       return json({ error: 'history array required' }, { status: 400 });
@@ -31,7 +31,8 @@ export async function POST({ request }) {
 
     // Orchestrate response with current metrics
     const orchestrator = new Orchestrator();
-    const result = await orchestrator.orchestrate(contents, currentMetrics);
+    // Pass reflectionContext (containing summary and new items) to orchestrator
+    const result = await orchestrator.orchestrate(contents, currentMetrics, reflectionContext || { summary: '', items: [] });
 
     // Now update metrics with the complete exchange (user + assistant)
     metricsTracker.updateWithNewExchange(lastUserMessage, result.assistantMessage);
@@ -43,7 +44,8 @@ export async function POST({ request }) {
       reason: result.reason,
       metrics: updatedMetrics,
       inputAnalysis: result.inputAnalysis,
-      evaluation: result.evaluation
+      evaluation: result.evaluation,
+      updatedReflectionSummary: result.updatedReflectionSummary // Pass back new summary if generated
     });
   } catch (err) {
     console.error('Chat API error:', err);

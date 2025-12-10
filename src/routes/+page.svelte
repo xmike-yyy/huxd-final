@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, afterUpdate } from 'svelte';
   import { conversations } from '$lib/stores/conversations.js';
   import { reflections } from '$lib/stores/reflections.js';
   import { withRetry } from '$lib/services/retry.js';
@@ -19,6 +19,23 @@
   let selectionText = '';
   let selectionTop = 0;
   let selectionLeft = 0;
+
+  let isLeftSidebarOpen = true;
+  let isRightSidebarOpen = true;
+
+  // Auto-scroll logic
+  afterUpdate(() => {
+    if (chatContainerEl) {
+      // Check if we were already near bottom before update to decide whether to auto-scroll
+      const threshold = 150; // pixels from bottom
+      const isNearBottom = chatContainerEl.scrollHeight - chatContainerEl.scrollTop - chatContainerEl.clientHeight <= threshold;
+      
+      // If we are sending (loading) or were already at the bottom, auto-scroll
+      if (isNearBottom || isLoading) {
+         chatContainerEl.scrollTo({ top: chatContainerEl.scrollHeight, behavior: 'smooth' });
+      }
+    }
+  });
 
   // Reactive variables from store
   $: currentSession = $conversations.currentSessionId
@@ -187,6 +204,19 @@
       const sessionId = $conversations.currentSessionId;
       const previousMetrics = currentSession?.metrics || null;
 
+      // Filter reflections: send summary + only items newer than the summary
+      const reflectionState = $reflections;
+      const lastSummarized = reflectionState.lastSummarizedAt ? new Date(reflectionState.lastSummarizedAt) : new Date(0);
+      
+      const newReflections = reflectionState.items.filter(item => 
+        new Date(item.createdAt) > lastSummarized
+      );
+
+      const reflectionContext = {
+        summary: reflectionState.summary,
+        items: newReflections
+      };
+
       // Call API with session ID and previous metrics (with auto-retry)
       const data = await withRetry(async () => {
         const res = await fetch('/api/chat', {
@@ -195,7 +225,8 @@
           body: JSON.stringify({
             history: messages.concat([userMessage]),
             sessionId: sessionId,
-            previousMetrics: previousMetrics
+            previousMetrics: previousMetrics,
+            reflectionContext: reflectionContext
           })
         });
         const body = await res.json();
@@ -204,6 +235,11 @@
         }
         return body;
       }, { retries: 2, delayMs: 300, factor: 2 });
+
+      // Update reflection summary if backend returned a new one
+      if (data.updatedReflectionSummary) {
+        reflections.updateSummary(data.updatedReflectionSummary);
+      }
 
       // Add assistant message with timestamp
       const assistantMessage = {
@@ -324,9 +360,10 @@
 
   .app {
     display: grid;
-    grid-template-columns: 280px 1fr 350px;
+    grid-template-columns: var(--left-w) minmax(300px, 1fr) var(--right-w);
     height: 100vh;
     gap: 0;
+    transition: grid-template-columns 0.3s ease;
   }
 
   /* Sidebar Section */
@@ -335,6 +372,14 @@
     display: flex;
     flex-direction: column;
     border-right: 1px solid #e5e7eb;
+    overflow: hidden;
+  }
+  
+  .sidebar-content {
+    width: 280px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   .sidebar-header {
@@ -509,6 +554,7 @@
     min-height: 0;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
     position: relative;
+    scroll-behavior: smooth;
   }
 
   .message-wrapper {
@@ -667,6 +713,14 @@
     display: flex;
     flex-direction: column;
     border-left: 1px solid #e5e7eb;
+    overflow: hidden;
+  }
+  
+  .reflection-content-wrapper {
+    width: 350px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   .reflection-header {
@@ -887,7 +941,7 @@
 
   @media (max-width: 1024px) {
     .app {
-      grid-template-columns: 1fr;
+      grid-template-columns: 1fr !important;
       grid-template-rows: auto 1fr 300px;
     }
 
@@ -895,6 +949,15 @@
       border-right: none;
       border-bottom: 1px solid #e5e7eb;
       max-height: 150px;
+      width: 100% !important; /* Override fixed width if any issues */
+    }
+
+    .sidebar-content {
+        width: 100%;
+    }
+    
+    .reflection-content-wrapper {
+        width: 100%;
     }
 
     .sessions-list {
@@ -913,61 +976,87 @@
       border-top: 1px solid #e5e7eb;
     }
   }
+
+  .icon-btn {
+    background: transparent;
+    border: none;
+    color: white;
+    padding: 0.5rem;
+    cursor: pointer;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+  }
+  .icon-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
 </style>
 
-<div class="app">
+<div class="app" style="--left-w: {isLeftSidebarOpen ? '280px' : '0px'}; --right-w: {isRightSidebarOpen ? '350px' : '0px'};">
   <!-- Sidebar Section -->
   <div class="sidebar">
-    <div class="sidebar-header">
-      <div class="sidebar-title">B-Me</div>
-      <button class="new-chat-btn" on:click={() => conversations.createSession()}>
-        + New Chat
-      </button>
-    </div>
+    <div class="sidebar-content">
+      <div class="sidebar-header">
+        <div class="sidebar-title">B-Me</div>
+        <button class="new-chat-btn" on:click={() => conversations.createSession()}>
+          + New Chat
+        </button>
+      </div>
 
-    <div class="sessions-list">
-      {#if sessionList.length === 0}
-        <div class="empty-sessions">
-          <p>No chats yet.</p>
-          <p style="font-size: 0.8rem;">Start a conversation!</p>
-        </div>
-      {:else}
-        {#each sessionList as session (session.id)}
-          <div
-            class="session-item {session.id === $conversations.currentSessionId ? 'active' : ''}"
-            on:click={() => conversations.setCurrentSession(session.id)}
-          >
-            <div class="session-title">{session.title}</div>
-            <div class="session-date">{formatDate(session.createdAt)}</div>
-            <div class="session-actions">
-              <button
-                class="session-rename"
-                on:click|stopPropagation={() => startRename(session.id, session.title)}
-              >
-                Rename
-              </button>
-              <button
-                class="session-delete"
-                on:click|stopPropagation={() => confirmDelete(session.id)}
-              >
-                Delete
-              </button>
-            </div>
+      <div class="sessions-list">
+        {#if sessionList.length === 0}
+          <div class="empty-sessions">
+            <p>No chats yet.</p>
+            <p style="font-size: 0.8rem;">Start a conversation!</p>
           </div>
-        {/each}
-      {/if}
+        {:else}
+          {#each sessionList as session (session.id)}
+            <div
+              class="session-item {session.id === $conversations.currentSessionId ? 'active' : ''}"
+              on:click={() => conversations.setCurrentSession(session.id)}
+            >
+              <div class="session-title">{session.title}</div>
+              <div class="session-date">{formatDate(session.createdAt)}</div>
+              <div class="session-actions">
+                <button
+                  class="session-rename"
+                  on:click|stopPropagation={() => startRename(session.id, session.title)}
+                >
+                  Rename
+                </button>
+                <button
+                  class="session-delete"
+                  on:click|stopPropagation={() => confirmDelete(session.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          {/each}
+        {/if}
+      </div>
     </div>
   </div>
 
   <!-- Chat Section -->
   <div class="chat-section">
     <div class="header">
-      <div class="logo">
-        <span class="flower">✳</span>
-        <span>B-Me</span>
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <button class="icon-btn" on:click={() => isLeftSidebarOpen = !isLeftSidebarOpen} title={isLeftSidebarOpen ? "Close Sidebar" : "Open Sidebar"}>
+          {@html isLeftSidebarOpen ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>' : '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>'}
+        </button>
+        <div class="logo">
+          <span class="flower">✳</span>
+          <span>B-Me</span>
+        </div>
       </div>
-      <div class="header-actions">
+      <div class="header-actions" style="display: flex; align-items: center; gap: 0.5rem;">
         <a class="about-btn" href="/about">About</a>
+        <button class="icon-btn" on:click={() => isRightSidebarOpen = !isRightSidebarOpen} title={isRightSidebarOpen ? "Close Reflections" : "Open Reflections"}>
+          {@html isRightSidebarOpen ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>' : '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>'}
+        </button>
       </div>
     </div>
 
@@ -975,7 +1064,7 @@
       {#if selectionVisible}
         <div
           class="selection-toolbar"
-          style={`top:${selectionTop}px;left:${selectionLeft}px;`}
+          style="top:{selectionTop}px;left:{selectionLeft}px;"
         >
           <span>Add to reflections?</span>
           <button on:click={addSelectionToReflection}>Add</button>
@@ -1037,46 +1126,48 @@
 
   <!-- Reflection Log Section -->
   <div class="reflection-section">
-    <div class="reflection-header">
-      <h2>Reflection Log</h2>
-    </div>
+    <div class="reflection-content-wrapper">
+      <div class="reflection-header">
+        <h2>Reflection Log</h2>
+      </div>
 
-    <div class="reflections-list">
-      {#if $reflections.length === 0}
-        <div class="empty-reflections">
-          <p>No reflections yet.</p>
-          <p style="font-size: 0.9rem;">Write down your thoughts and insights.</p>
-        </div>
-      {:else}
-        {#each $reflections as reflection (reflection.id)}
-          <div class="reflection-card">
-            <div class="reflection-date">{formatDate(reflection.createdAt)}</div>
-            <div class="reflection-content">{reflection.content}</div>
-            <button class="delete-btn" on:click={() => reflections.deleteReflection(reflection.id)}>
-              Delete
-            </button>
+      <div class="reflections-list">
+        {#if $reflections.items.length === 0}
+          <div class="empty-reflections">
+            <p>No reflections yet.</p>
+            <p style="font-size: 0.9rem;">Write down your thoughts and insights.</p>
           </div>
-        {/each}
-      {/if}
-    </div>
+        {:else}
+          {#each $reflections.items as reflection (reflection.id)}
+            <div class="reflection-card">
+              <div class="reflection-date">{formatDate(reflection.createdAt)}</div>
+              <div class="reflection-content">{reflection.content}</div>
+              <button class="delete-btn" on:click={() => reflections.deleteReflection(reflection.id)}>
+                Delete
+              </button>
+            </div>
+          {/each}
+        {/if}
+      </div>
 
-    <div class="reflection-footer">
-      <button class="start-btn" on:click={() => (showReflectionModal = true)}>
-        🖊 Start writing...
-      </button>
-      {#if showReflectionModal}
-        <div style="margin-top: 1rem;">
-          <textarea
-            bind:value={reflectionInput}
-            placeholder="What's on your mind? Write down your thoughts, insights, or feelings..."
-            style="width: 100%; min-height: 120px; padding: 1rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; font-family: inherit; outline: none; box-sizing: border-box;"
-          ></textarea>
-          <div class="modal-actions" style="margin-top: 0.75rem;">
-            <button class="cancel-btn" on:click={() => { showReflectionModal = false; reflectionInput = ''}}>Cancel</button>
-            <button on:click={saveReflection}>Save Reflection</button>
+      <div class="reflection-footer">
+        <button class="start-btn" on:click={() => (showReflectionModal = true)}>
+          🖊 Start writing...
+        </button>
+        {#if showReflectionModal}
+          <div style="margin-top: 1rem;">
+            <textarea
+              bind:value={reflectionInput}
+              placeholder="What's on your mind? Write down your thoughts, insights, or feelings..."
+              style="width: 100%; min-height: 120px; padding: 1rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; font-family: inherit; outline: none; box-sizing: border-box;"
+            ></textarea>
+            <div class="modal-actions" style="margin-top: 0.75rem;">
+              <button class="cancel-btn" on:click={() => { showReflectionModal = false; reflectionInput = ''}}>Cancel</button>
+              <button on:click={saveReflection}>Save Reflection</button>
+            </div>
           </div>
-        </div>
-      {/if}
+        {/if}
+      </div>
     </div>
   </div>
 </div>

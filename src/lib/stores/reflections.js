@@ -9,18 +9,23 @@ const STORAGE_KEY = 'bme_reflections';
 function createReflectionsStore() {
   // Load from localStorage
   const loadFromStorage = () => {
-    if (!browser) return [];
+    if (!browser) return { items: [], summary: '', lastSummarizedAt: null };
 
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        return JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        // Backward compatibility: if it's an array, convert to new structure
+        if (Array.isArray(parsed)) {
+          return { items: parsed, summary: '', lastSummarizedAt: null };
+        }
+        return parsed;
       }
     } catch (error) {
       console.error('Error loading reflections from storage:', error);
     }
 
-    return [];
+    return { items: [], summary: '', lastSummarizedAt: null };
   };
 
   const initial = loadFromStorage();
@@ -57,7 +62,10 @@ function createReflectionsStore() {
         createdAt: new Date().toISOString()
       };
 
-      update(reflections => [reflection, ...reflections]);
+      update(state => ({
+        ...state,
+        items: [reflection, ...state.items]
+      }));
       return reflection.id;
     },
 
@@ -66,7 +74,22 @@ function createReflectionsStore() {
      * @param {string} id - The reflection ID
      */
     deleteReflection: (id) => {
-      update(reflections => reflections.filter(r => r.id !== id));
+      update(state => ({
+        ...state,
+        items: state.items.filter(r => r.id !== id)
+      }));
+    },
+
+    /**
+     * Update the reflection summary
+     * @param {string} newSummary - The summarized text
+     */
+    updateSummary: (newSummary) => {
+      update(state => ({
+        ...state,
+        summary: newSummary,
+        lastSummarizedAt: new Date().toISOString()
+      }));
     },
 
     /**
@@ -76,7 +99,7 @@ function createReflectionsStore() {
       if (browser) {
         localStorage.removeItem(STORAGE_KEY);
       }
-      set([]);
+      set({ items: [], summary: '', lastSummarizedAt: null });
     },
 
     /**
@@ -85,7 +108,7 @@ function createReflectionsStore() {
      */
     getSorted: () => {
       const state = get({ subscribe });
-      return state.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      return state.items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     }
   };
 }
