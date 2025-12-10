@@ -72,25 +72,26 @@
       recognition.lang = 'en-US';
 
       recognition.onresult = (event) => {
-        // Only process new results starting from event.resultIndex
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        // Process all results to separate final and interim
+        for (let i = 0; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalTranscriptAccumulated += transcript + ' ';
+            finalTranscript += transcript + ' ';
+          } else {
+            interimTranscript += transcript + ' ';
           }
         }
 
-        // Get the latest interim result (if any)
-        let interimTranscript = '';
-        if (event.results.length > 0) {
-          const lastResult = event.results[event.results.length - 1];
-          if (!lastResult.isFinal) {
-            interimTranscript = lastResult[0].transcript;
-          }
+        // Update accumulated final transcript only if we have new final text
+        if (finalTranscript.trim()) {
+          finalTranscriptAccumulated = finalTranscript.trim();
         }
 
-        // Show both for UX; send will use the combined text
-        input = (finalTranscriptAccumulated + interimTranscript).trim();
+        // Show combined final + latest interim
+        input = (finalTranscriptAccumulated + ' ' + interimTranscript).trim();
       };
 
       recognition.onerror = () => {
