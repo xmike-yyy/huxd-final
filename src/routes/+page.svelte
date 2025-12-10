@@ -14,6 +14,7 @@
   let isRecording = false;
   let recognition = null;
   let sttSupported = false;
+  let finalTranscriptAccumulated = ''; // Track finalized speech text
   let chatContainerEl = null;
   let selectionVisible = false;
   let selectionText = '';
@@ -71,18 +72,25 @@
       recognition.lang = 'en-US';
 
       recognition.onresult = (event) => {
-        let finalTranscript = '';
-        let interimTranscript = '';
+        // Only process new results starting from event.resultIndex
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' ';
-          } else {
-            interimTranscript += transcript;
+            finalTranscriptAccumulated += transcript + ' ';
           }
         }
+
+        // Get the latest interim result (if any)
+        let interimTranscript = '';
+        if (event.results.length > 0) {
+          const lastResult = event.results[event.results.length - 1];
+          if (!lastResult.isFinal) {
+            interimTranscript = lastResult[0].transcript;
+          }
+        }
+
         // Show both for UX; send will use the combined text
-        input = (input + ' ' + finalTranscript + interimTranscript).trim();
+        input = (finalTranscriptAccumulated + interimTranscript).trim();
       };
 
       recognition.onerror = () => {
@@ -100,6 +108,7 @@
   function startRecording() {
     if (!sttSupported || isRecording) return;
     input = ''; // reset for a fresh message
+    finalTranscriptAccumulated = ''; // reset accumulated transcript
     isRecording = true;
     try {
       recognition?.start();
