@@ -1,6 +1,8 @@
 <script>
   const team = [
-    { name: 'B‑Me Team', role: 'Creators' }
+    { name: 'Michael Sun', role: 'Developer' },
+    { name: 'Eric Noriega', role: 'Developer' },
+    { name: 'Brios Olivares', role: 'Developer' }
   ];
 </script>
 
